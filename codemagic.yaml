@@ -49,16 +49,58 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$PROJECT_BUILD_NUMBER
 
-      - name: Create IPA structure
+      - name: Find and verify build output
         script: |
-          cd build/ios/Debug-iphoneos
-          mkdir -p Payload
-          cp -r Runner.app Payload/
-          zip -r ../../../ag_tax_schedule.ipa Payload/
+          echo "Searching for Runner.app in build directory..."
+          find build -name "Runner.app" -type d
+          
+          # List all directories in build/ios
+          echo "Contents of build/ios:"
+          ls -la build/ios/ || echo "build/ios directory not found"
+          
+          # Check common output locations
+          if [ -d "build/ios/iphoneos" ]; then
+            echo "Found build/ios/iphoneos:"
+            ls -la build/ios/iphoneos/
+          fi
+          
+          if [ -d "build/ios/Debug-iphoneos" ]; then
+            echo "Found build/ios/Debug-iphoneos:"
+            ls -la build/ios/Debug-iphoneos/
+          fi
+
+      - name: Create IPA structure (Fixed)
+        script: |
+          # Find the actual location of Runner.app
+          RUNNER_APP_PATH=$(find build -name "Runner.app" -type d | head -1)
+          
+          if [ -z "$RUNNER_APP_PATH" ]; then
+            echo "ERROR: Runner.app not found!"
+            exit 1
+          fi
+          
+          echo "Found Runner.app at: $RUNNER_APP_PATH"
+          
+          # Create IPA structure in a writable location
+          mkdir -p ipa_temp/Payload
+          cp -r "$RUNNER_APP_PATH" ipa_temp/Payload/
+          
+          # Create IPA file
+          cd ipa_temp
+          zip -r ../ag_tax_schedule.ipa Payload/
+          cd ..
+          
+          # Verify IPA was created
+          if [ -f "ag_tax_schedule.ipa" ]; then
+            echo "✅ IPA created successfully: $(ls -lh ag_tax_schedule.ipa)"
+          else
+            echo "❌ Failed to create IPA"
+            exit 1
+          fi
 
     artifacts:
       - ag_tax_schedule.ipa
-      - build/ios/Debug-iphoneos/Runner.app/**
+      - build/ios/**/Runner.app/**
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
 
